@@ -1,0 +1,658 @@
+---
+title: "Analysis of March Madness"
+author: "Olivia Wivestad, Conner Byrd, Dani Trejo, Aidan Gildea"
+date: "due April 6, 2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+```{r college-basketball, echo = FALSE, include=FALSE}
+library(tidyverse)
+library(broom)
+library(ggplot2)
+library(ggpol)
+library(class)
+library(MLmetrics)
+library(knitr)
+library(kableExtra)
+library(RColorBrewer)
+college_basketball <- read_csv("data/cbb.csv")
+college_basketball2020 <- read_csv("data/cbb20.csv")
+set.seed(12345)
+```
+
+## Introduction
+  As avid Duke Basketball fans and registered Cameron Crazies, all members of 
+the Outliers team were disappointed to hear about the cancellation of March 
+Madness. However, the unforeseen ending of Duke's season, along with numerous 
+other colleges', is a necessary step in combating the ongoing Coronavirus 
+pandemic. Across the globe, people have been forced to adjust their habits and
+put their lives on hold. With shelter in place and lockdown orders being 
+increasingly mandated, we have found ourselves with more free time than ever 
+before. With this, we are oftentimes left wondering "what if" or "what would 
+have happened." In most cases, these questions are left unanswered; however, 
+the outcome of this year's March Madness may be one we can answer. 
+
+Drawing from data of Division I basketball teams in past seasons and using R, 
+our team plans to answer the primary research question: **What statistical 
+factors most attribute to success in  March Madness for teams?** Our resulting 
+findings will hopefully uncover the true influence of "madness" on the 
+tournament and offer a prediction of who the 2020 championship team may 
+have been. 
+
+Our dataset was provided on
+[Kaggle](https://www.kaggle.com/andrewsundberg/college-basketball-dataset). 
+The Kaggle user scraped the data from another basketball statistic dataset
+found [here](http://barttorvik.com/trank.php#). The site is run by Bart 
+Torvik and colleagues, and it records basketball statistics from the past
+6 years. Most of the figures are drawn from various sites, including the 
+official NCAA site, after each official game and season. Websites like the
+official NCAA website provide detailed statistics on teams, games, and 
+seasons, as well as some figures for an extra fee. The Kaggle user cleaned 
+Torvik's dataset and added three additional variables (POSTSEASON, SEED, 
+and YEAR), giving us our dataset. Each case represents a team from a 
+specific season (2015-2020) and consists of the following variables: 
+
+```{r variables}
+var_table <- data.frame(
+  Variables = c("Team", "CONF", "G", "W", "ADJOE (Adjusted Offensive Efficiency)", "ADJDE (Adjusted Defensive Efficiency)", "BARTHAG",
+                "EFG_O", "EFG_D", "TOR", "TORD", "ORB", "DRB", "FTR", "FTRD",
+                "2P_O", "3P_O", "ADJ_T", "WAB (Wins Above Bubble)", "POSTSEASON", "SEED", "YEAR"),
+  Descriptions = c("The Division I college basketball school", "The Athletic Conference in which the school participates in", "Number of games played", 
+                   "Number of games won", "An estimate of the offensive 
+  efficiency (points scored per 100 possessions) a team would have against the 
+  average Division I defense", "An estimate of the defensive 
+  efficiency (points allowed per 100 possessions) a team would have against 
+  the average Division I offense)", "Power Rating (Chance of beating an average Division I team)", "Effective Field Goal Percentage Shot", "Effective Field Goal Percentage Allowed", "Turnover Rate", "Steal Rate", "Offensive Rebound Percentage", "Defensive Rebound Percentage","Free Throw Rate (How often the given team shoots Free Throws)", "Two-Point Shooting Percentage", "Two-Point Shooting Percentage Allowed", "Three-Point Shooting Percentage", "Three-Point Shooting Percentage Allowed", "The bubble refers to the cut off between making 
+  the NCAA March Madness Tournament and not making it", "Round where the given team was eliminated or where their season 
+  ended     
+    + R68 = First Four, R64 = Round of 64, R32 = Round of 32, 
+    S16 = Sweet Sixteen, E8 = Elite Eight, F4 = Final Four, 2ND = Runner-up, 
+    Champion = Winner of the NCAA
+    March Madness", "Seed in the NCAA March Madness Tournament", "Season")
+  )
+
+kable(var_table, "latex", booktabs = T) %>%
+  kable_styling(full_width = F) %>%
+  column_spec(1, bold = T, color = "blue") %>%
+  column_spec(2, width = "30em")
+```
+
+## Data Analysis Plan
+To answer our main research question, we will use the following variables:
+
+Dependent: POSTSEASON
+Independent: We will use all of the other variables to analyze our dependent
+variable, however, we expect many of them to be unimportant. Using backwards
+elimination, we will remove the extraneous variables. We initially predict 
+that the variables SEED, WAB, G, W, ADJOE, ADJDE, and BARTHAG will be most 
+helpful in answering our question. 
+ 
+To start, much of our statistical inferencing will be based on creating 
+a linear model with backward selection to find equation of adequate predictors. 
+Doing this would eliminate unimportant variables from our dataset and give us 
+a more focused idea on what to model. We will observe which variables have the 
+strongest influence on a team's chance of making the Final Four in the 
+tournament by looking at their respective p-values. Basic descriptive methods 
+can be used to summarize these findings. We could also use this to input the 
+statistics of teams from the 2019-20 basketball season and predict which teams 
+would make the Final Four and beyond, hopefully giving us some closure on this 
+sad ending of a basketball season. 
+
+
+#### Who has won in the past?
+```{r champions-and-seed, echo = FALSE}
+winners <- college_basketball %>%
+  filter(POSTSEASON == "Champions") %>% 
+  select(TEAM, POSTSEASON, YEAR, SEED, CONF) %>% 
+  arrange(desc(YEAR))
+
+kable(winners, "latex", booktabs = T)
+```
+
+There are four teams who won the NCAA in the last five years: Villanova won in 
+both 2016 and 2018. Since these teams won, we can use statistics from their
+respective seasons to discern what variables have the biggest effect on a 
+winning run in the NCAA tournament. 
+
+#### What conferences produce the most successful teams?
+```{r conference, echo = FALSE}
+conferences <- college_basketball %>% 
+  group_by(CONF) %>% 
+  filter(POSTSEASON %in% c("Champions", "2ND", "F4")) %>% 
+  count(CONF) %>%
+  arrange(desc(n)) 
+
+kable(conferences, "latex", booktabs = T)
+```
+
+There are only eight conferences with teams that have made it to the final four
+in the past 5 years out of a total 32 conferences. The ACC leads all conferences,
+having 5 total appearances. This reality could play an important part in
+narrowing down what team would have won in 2020. 
+
+#### New Variables and Datasets
+```{r new variables, echo = FALSE}
+college_basketball <- college_basketball %>%
+  mutate(win_percent = W/G) %>% 
+  mutate(final_four = POSTSEASON %in% c("F4", "2ND", "Champions"))%>%
+  mutate(post_wp = round(case_when(
+    POSTSEASON == "R64" ~ 0/1,
+    POSTSEASON == "R32" ~ 1/2,
+    POSTSEASON == "S16" ~ 2/3,
+    POSTSEASON == "E8" ~ 3/4,
+    POSTSEASON == "F4" ~ 4/5,
+    POSTSEASON == "2ND" ~ 5/6,
+    POSTSEASON == "Champions" ~ 6/6
+  ), 3)) 
+  
+madness_teams <- college_basketball %>%
+  na.omit(POSTSEASON)
+```
+
+We added two variables: "final_four"and "post_wp" which denotes whether a team 
+made it to the Final Four or better in a specific season and the 
+win percentage variable represent the proportion of games a team won in the 
+regular season, respectfully. 
+
+#### Duke's Winning Season
+
+```{r 2015_Duke, echo = FALSE}
+duke_stats <-college_basketball %>% 
+  filter(YEAR == "2015" & POSTSEASON == "Champions") %>%
+  select(SEED, WAB, win_percent, ADJOE, ADJDE, BARTHAG)
+
+kable(duke_stats, "latex", booktabs = T) %>%
+   kable_styling(full_width = F)
+```
+
+Throughout the season, the Cameron Crazies have hoped for a sixth NCAA 
+Championship. We will never know how this year's March Madness would have gone
+for Duke; however, looking at statistics from 2015 championship team may show 
+us what factors led to their success.
+
+#### Visualizations 
+  
+```{r visualizations, echo = FALSE}
+ggplot(data = college_basketball, mapping = aes(x = win_percent, y = ADJOE,
+                                                 color = final_four)) +
+  geom_point(alpha = .75) +
+  theme_bw() +
+  labs(title = "Strong Offensive Efficiency and Win Percentage 
+Lead to Success in March Madness", subtitle = "Data from 2015-2019", 
+x = "Regular Seasion Win Percentage", y = "Adjusted Offensive Efficiency", 
+color = "Final Four") +
+  scale_color_manual(values=c("light grey","blue"))
+
+ggplot(data = college_basketball, mapping = aes(x = win_percent, y = ADJDE,
+                                                 color = final_four)) +
+   geom_point(alpha = .75) +
+  theme_bw() +
+  labs(title = "Strong Defensive Efficiency and Win Percentage 
+Lead to Success in March Madness", subtitle = "Data from 2015-2019", 
+x = "Regular Seasion Win Percentage", y = "Adjusted Defensive Efficiency", 
+color = "Final Four") +
+  scale_color_manual(values=c("light grey","blue"))
+
+ggplot(data = college_basketball, mapping = aes(x = win_percent, y = BARTHAG,
+                                                 color = final_four)) +
+ geom_point(alpha = .75) +
+    theme_bw() +
+   labs(title = "Strong Power Rating and Win Percentage 
+Lead to Success in March Madness", subtitle = "Data from 2015-2019", 
+x = "Regular Seasion Win Percentage", y = "Power Rating", 
+color = "Final Four") + 
+  scale_color_manual(values=c("light grey","blue"))
+```
+
+#### Glimpse
+
+```{r glimpse, echo = FALSE}
+glimpse(college_basketball)
+glimpse(college_basketball2020)
+```
+
+## Methods and Results
+
+#### Clarifications
+For the goal of our analysis, we define success in the March Madness 
+tournament by a team's ability to make the Final Four round, in turn, meaning 
+they have a high Predicted Post Season Win Percentage.
+
+In order to make predictions about what would have happened in the 2020 
+tournament, we must use data from the 2015-2019 seasons and their respective 
+March Madness tournaments to create appropriate prediction models.
+
+#### Identifying which variables are the greatest predictors.
+
+```{r lm full}
+lm_factors <- lm(post_wp ~  SEED + WAB + win_percent + ADJOE + ADJDE + BARTHAG, 
+                 data = madness_teams)
+
+lm_step <- step(lm_factors, direction = "backward", trace = 0)
+
+step_table <- tidy(lm_step) %>%
+  select(term, estimate, p.value)
+
+kable(step_table, "latex", col.names = c("Term", "Estimate", "P-value"),
+      booktabs = T)
+
+r_sq <- glance(lm_step) %>%
+  select(r.squared)
+kable(r_sq, "latex", col.names = "R-squared", booktabs = T)
+
+```
+The equation for the linear model above is:
+
+Predicted Post Season Win % = 1.40+0.0425(ADJOE)-0.0492(ADJDE)-1.378(BARTHAG)
+
+With a r-squared value of 0.4687, we can attribute 46.87% of the variability in
+the Predicted Post Season Win Percentage to the three predictors: ADJOE, ADJDE,
+and BARTHAG. This is relatively low, but as we will explain in the Discussion
+section, this could be a sign of the randomness March Madness is known for. 
+
+**Conditions**
+
+```{r conditions, echo = FALSE}
+ggplot(data= augment(lm_step), aes(x=.fitted, y=.resid)) +
+  geom_point(size=1) +
+  theme_bw() +
+  geom_smooth(se=FALSE, method = "lm") +
+  labs(title = "Residual Plot", x = "Fitted", y = "Residual")
+
+ggplot(data= lm_step, aes(x = .resid)) +
+  geom_histogram(binwidth = .12) +
+  theme_bw() +
+  labs(title = "Distribution of Residuals", x="Residuals", y = "Count")
+```
+The linearity and variance assumptions of the linear model are not satisfied by 
+the residual plot because it does not display a random pattern. The residual plot seems to have different groupings of datapoints, the result of the post-season win percentages being ordinal. The distribution of the residuals 
+is approximately normal, allowing us to satisfy the normality assumption for 
+the linear model. We assume that independence is satisfied because each
+team is unique -- whether it be a different season or different college. While
+the violation of the linearity and variance assumption would typically nullify
+the model, we are using it for variable selection, and not inference, therefore,
+justifying its use. It is important to mention this model will not be used for
+any hypothesis testing or its p-values, instead it is only a means for 
+supporting the ad hoc process of variable selection. 
+
+*Reasoning for Linear Model and Interpretation*
+
+By using backward selection, we were able to remove the least contributive 
+predictors, leaving us only with those which we consider to be the most
+accurate for predicting Post 
+Season Win Percentage. This left us with three
+variables:  
+  1. ADJOE: For each unit increase in a team's Adjusted Offensive Efficiency, 
+we expect their predicted Post Season Win Percentage to increase by .0425 
+percentage points.  
+  2. ADJDE: For each unit increase in a team's Adjusted Defensive Efficiency, 
+we expect their predicted Post Season Win Percentage to decrease by .0492 
+percentage points.  
+  3. BARTHAG: For each unit increase in a team's Power Rating, we expect their 
+predicted Post Season Win Percentage to decrease by 1.378 percentage points. 
+
+#### Predictor Visualizations
+
+To ensure that our selected predictors exhibit the desired relationship with 
+Post-Season Win Percentage, we created visualization below. All data points are 
+categorized by the round they were eliminated during in March Madness, giving
+a better picture of how each predictor influences postseason prospects.
+```{r gg lm}
+ggplot(data = madness_teams, aes(x=factor(post_wp), y = ADJOE, 
+                                 color = POSTSEASON)) + 
+  geom_jitter(size = 1, width = 0.5, height = 0.5) + 
+  theme_bw() +
+  labs(title = "Offensive Efficiency Positively Correlates
+with Post Season Win Percentage", subtitle = "Data from 2015-2019", 
+x = "Post Season Win Percentage", y = "Adjusted Offensive Efficiency", 
+color = "Round Eliminated")
+
+ggplot(data = madness_teams, aes(x=factor(post_wp), y = ADJDE, 
+                                 color = POSTSEASON)) + 
+  geom_jitter(size = 1, width = 0.5, height = 0.5) + 
+  theme_bw() +
+  labs(title = "Defensive Efficiency Negatively Correlates 
+with Post Season Win Percentage", subtitle = "Data from 2015-2019", 
+x = "Post Season Win Percentage", y = "Adjusted Defensive Efficiency", 
+color = "Round Eliminated")
+
+ggplot(data = madness_teams, aes(x=factor(post_wp), y = BARTHAG, 
+                                 color = POSTSEASON)) +
+  geom_jitter(size = 1, width = 0.5, height = 0.5) + 
+  theme_bw() +
+  labs(title = "Power Rating Displays Positive
+Correlation with Post Season Win Percentage", subtitle = "Data from 2015-2019", 
+x = "Post Season Win Percentage", y = "Power Rating", 
+color = "Round Eliminated")
+```
+All the visualizations display the desired relationship between each predictor
+and Post Season Win Percentage. For both ADJOE and BARTHAG, this is a positive
+relationship, and for ADJDE, it is a negative relationship.
+
+#### Creating a logistic regression.
+Now that we have identified the best predictors for Predicted Post Season Win 
+Percentage, we can use these variables to attempt to classify which teams 
+(Name+Year) made it to the Final Four in a March Madness tournament. We can use 
+a Logistic Regression model to assess the test accuracy using the three 
+variables which we have identified as the best predictors for Predicted Post 
+Season Win Percentage (ADJOE, ADJDE, and BARTHAG). 
+
+```{r test and train, echo= FALSE}
+madness_factors <- madness_teams %>%
+  select(final_four, ADJOE, ADJDE, BARTHAG)
+
+madness_factors <- madness_factors %>%
+  na.omit(ADJOE, ADJDE, BARTHAG)
+
+indices <- sample(nrow(madness_factors), 50)
+
+madness_test <- madness_factors %>%
+  slice(indices)
+
+madness_train <- madness_factors %>%
+  slice(-indices)
+
+train_F4 <- madness_train %>%
+  pull(final_four)
+
+true_F4 <- madness_test %>%
+  pull(final_four)
+
+train <- madness_train %>%
+  select(ADJOE, ADJDE, BARTHAG)
+test <- madness_test %>%
+  select(ADJOE, ADJDE, BARTHAG)
+```
+
+```{r binary}
+madness_train <- madness_train %>%
+  mutate(yes_F4 = case_when(
+    train_F4 == "FALSE" ~ 0,
+    train_F4 == "TRUE" ~ 1,
+    ))
+```
+
+
+```{r logit, include = FALSE}
+logit_F4 <- glm(yes_F4 ~ ADJOE + ADJDE + BARTHAG, 
+                data = madness_train, 
+                family = "binomial")
+
+tidy(logit_F4) %>%
+  select(term, estimate)
+
+pred_F4 <- augment(logit_F4, newdata = madness_test) %>%
+  pull(.fitted)
+
+pred_probs <- exp(pred_F4)/(1 + exp(pred_F4))
+  round(pred_probs, 3)
+
+teams_F4 <- numeric(50)
+  for (i in 1:50) {
+    teams_F4[i] <- if_else(pred_probs[i] >= 0.4, "TRUE", "FALSE")
+  }
+
+teams_F4
+true_F4 == teams_F4
+```
+
+```{r results}
+pred_acc <- mean(true_F4 == teams_F4) 
+f1_score <- F1_Score(true_F4, teams_F4)
+kable(pred_acc, "latex", col.names = "Prediction Accuracy", booktabs = T)
+kable(f1_score, "latex", col.names = "F1 Score ",booktabs = T)
+```
+
+The logistic regression model predicts if a team made it to the Final Four with 
+an accuracy of 94%. However, this high prediction accuracy is likely a result 
+of the large number of teams that do not make the Final Four (60/64), which 
+already accounts for 93.75% of the accuracy. The F1 Score of the model, 0.968,
+is a better measure because it takes into account all four outcomes of a model:  
+  • false-positive (predicted to make Final Four when in reality they did not)  
+  • false-negative (predicted to not make Final Four when in reality they did)  
+  • true-positive (predicted to make Final Four and they did in reality)  
+  • true-negative (predicted to not make Final Four when in reality they did 
+  not)
+
+This high F1 score (near 1) confirms that these three variables
+(ADJOE, ADJDE, and BARTHAG) accurately predict whether a team is likely to 
+make it to the Final Four round of March Madness. By "tuning" the model, we determined that a probability threshold of 40% produced the most accurate F1 score and was best for classifying the teams.
+
+#### Creating a KNN-model.
+
+We can also use a KNN-model to classify whether a team is predicted to
+make it to the Final Four round. As concluded in the Logistic Regression model, 
+the F1 score is a better measure of test accuracy; therefore, we will use the 
+F1 Score to assess which k-nearest neighbor number results in the best model.
+
+```{r knn model, warning = FALSE}
+f1result <- numeric(10)
+
+for (i in 1:10) {
+  knn_model <- knn(train, test, train_F4, k = i, prob = F, use.all = T)
+  f1result[i] <- F1_Score(true_F4, knn_model)
+}
+
+f1_table <- f1result %>%
+  as_tibble() %>%
+  mutate(k = which.max(f1result)) %>%
+  slice(which.max(f1result))
+
+kable(f1_table, "latex", col.names = c("F1 Score", "k"), booktabs = T)
+
+```
+
+The KNN-model has the highest test accuracy when using a k-nearest neighbor 
+number of 5, which produces a KNN model with a F1 score of 0.958.
+This high F1 score (near 1) confirms that these three variables
+(ADJOE, ADJDE, and BARTHAG) accurately help predict whether a team is likely to 
+make it to the Final Four round of March Madness.
+
+
+
+#### Comparison of KNN and Logit Models
+
+After generating both a Logistic Regression model and a KNN-model with a 
+k-nearest neighbor of 5, we observe that the logistic model has a higher F1 score, 
+and therefore, is the more accurate model. We can conclude that both types of 
+models -- when using explanatory variables ADJOE, ADJDE, BARTHAG -- are highly 
+acccurate at classifying whether or not a team made it to the Final Four. 
+
+#### Would Duke have made it to the Final Four in 2020?
+
+The ADJOE, ADJDE, and BARTHAG of this year's Duke basketball team will predict
+whether they would have made it to the Final Four. This dataset was sourced 
+from the same website and user as the other seasons, and provides all the same
+statistics for 2020 teams.
+
+With the logistic regression model having a higher prediction accuracy with an
+F1 score of 0.968, we will use it over the KNN-model for this analysis.
+
+```{r logit-2020-season, warning = FALSE, echo = FALSE}
+duke_2020 <- college_basketball2020 %>%
+  filter(TEAM == "Duke") %>%
+  select(ADJOE, ADJDE, BARTHAG)
+
+predDuke_F4 <- augment(logit_F4, newdata = duke_2020) %>%
+  pull(.fitted)
+
+predDuke_probs <- exp(predDuke_F4)/(1 + exp(predDuke_F4))
+
+Duke_F4 <- numeric(1)
+Duke_F4 <- if_else(predDuke_probs >= 0.5, "TRUE", "FALSE")
+kable(round(predDuke_probs, 3), "latex", col.names = "Predicted Probability",
+      booktabs = T)
+kable(Duke_F4, "latex", col.names = "Final Four?", booktabs = T)
+```
+
+According to our logistic regression model, the 2019-2020 Duke Men's 
+Basketball team would not have made it to the Final Four. 
+
+But March Madness is known for is wild outcomes, so let's see how our model has
+distinctly predicted Duke's success in the 2015-2019 seasons.
+
+#### Have predictions stopped Duke Basketball from dominating over the past five years?
+
+Since we refused to believe that Duke would have been eliminated before the 
+Final Four this year, we decided to analyze how accurate our model has 
+been in predicting Duke Final Four appearances over the last five years. 
+
+```{r test-and-train-duke, echo = FALSE, warning = FALSE}
+madness_factors_d <- madness_teams %>%
+  filter(TEAM != "Duke") %>% 
+  select(final_four, ADJOE, ADJDE, BARTHAG)
+
+madness_factors_d <- madness_factors_d %>%
+  na.omit(ADJOE, ADJDE, BARTHAG)
+
+train_F4_d <- madness_factors_d %>%
+  pull(final_four)
+
+madness_factors_d <- madness_factors_d %>%
+  mutate(yes_F4 = case_when(
+    train_F4_d == "FALSE" ~ 0,
+    train_F4_d == "TRUE" ~ 1,
+    ))
+
+duke_test <- madness_teams %>%
+  filter(TEAM == "Duke") %>%
+  select(YEAR, final_four, ADJOE, ADJDE, BARTHAG) %>% 
+  na.omit(ADJOE, ADJDE, BARTHAG)
+
+true_F4_d <- duke_test %>%
+  pull(final_four)
+```
+
+
+```{r 2020 logit Duke, echo = FALSE, warning = FALSE}
+logit_Duke <- glm(yes_F4 ~ ADJOE + ADJDE + BARTHAG, data = madness_factors_d, 
+family = "binomial")
+
+tidy_logit <- tidy(logit_Duke) %>%
+select(term, estimate)
+
+pred_F4 <- augment(logit_Duke, newdata = duke_test) %>%
+pull(.fitted)
+
+years_Duke <- augment(logit_Duke, newdata = duke_test) %>%
+  pull(YEAR)
+
+pred_probs <- round(exp(pred_F4)/(1 + exp(pred_F4)), 3)
+
+teams_F4 <- numeric(5)
+for (i in 1:5) {
+teams_F4[i] <- if_else(pred_probs[i] >= 0.5, "TRUE", "FALSE")
+}
+Duke_chart <- cbind(years_Duke, pred_probs, teams_F4, true_F4_d == teams_F4)%>%
+  as_tibble()
+
+kable(Duke_chart, "latex", col.names = c("Year", "Predicted Probability", "Predicted Final Four", "Prediction: TRUE or FALSE?"), 
+      booktabs = T)
+
+kable(mean(true_F4_d == teams_F4), "latex", col.names = "Prediction Accuracy", 
+      booktabs = T)
+```
+
+The logistic regression model 100% accurately predicted whether or not Duke made
+it to the Final Four in the 2015-2019 seasons, which provides confidence in the
+conclusion that Duke Men's Basketball team would not have made it to the Final 
+Four in 2020. Unfortunately, our analysis has predicted that we would not have 
+seen the results we all hoped for, which was a Final Four appearance for the 
+Blue Devils. 
+
+#### What teams were most likely to make the Final Four in 2020?
+
+```{r 2020 F4, echo = FALSE}
+set.seed(12345)
+MM_2020 <- college_basketball2020 %>%
+  select(TEAM, ADJOE, ADJDE, BARTHAG) %>%
+  na.omit()
+
+pred2020_F4 <- augment(logit_F4, newdata = MM_2020) %>%
+  pull(.fitted)
+teams2020_F4 <- augment(logit_F4, newdata = MM_2020) %>%
+  pull(TEAM)
+       
+pred2020_probs <- round((exp(pred2020_F4)/(1 + exp(pred2020_F4))), 3)
+
+top_10 <- cbind(teams2020_F4, pred2020_probs) %>%
+  as_tibble() %>%
+  arrange(desc(pred2020_probs))%>%
+  slice(1:10) 
+
+kable(top_10, "latex", col.names = c("Team", "Predicted Probability"), 
+      booktabs = T)
+
+```
+By using our logistic regression model and using data from the 2020 season, we 
+were able to calculate the probability that each team would make the Final Four 
+in a hypothetical 2020 March Madness. While we have the top 10 most likely 
+Final Four teams above, it looks like the Final Four this year would have 
+included: Kansas, Gonzaga, Baylor, and Dayton. Since Kansas has the highest 
+probability of making to the Final Four, we have evidence to believe that they
+had the best odds of winning the tournament.
+
+## Discussion
+
+With a general knowledge of basketball and the initial visualizations in our
+introduction, our group was able to narrow down the variables of interest. 
+However, to further ensure confidence in our predictors, and in turn, our
+models, we created a linear model with backward selection. This resulted in 
+three valuable predictors for Predicted Post Season Win Percentage: ADJOE, 
+ADJDE, and BARTHAG. When used as explanatory variables in both a KNN-model and 
+Logistic Regression model, postseason teams were classified by whether or not 
+they made the final four. By comparing the models' F1 scores, we concluded that 
+the Logistic Regression model was the most accurate in predicting which 
+teams made the Final Four in the 2015-2019 seasons. Since its F1 score was near
+perfect at 0.979, we have deduced that the three predictors -- ADJOE, 
+ADJDE, and BARTHAG -- largely attribute to success in March Madness.
+
+Using this information from the 2015-2019 seasons, we were able to predict
+the postseason prospects of the 2020 Duke team. The Logistic Regression model
+predicted an unsuccessful outcome for the Brotherhood, meaning, they would not
+have made the Final Four. To further investigate this conclusion, we completed 
+another Logistic Regression model, classifying whether only the past Duke teams 
+had made the Final Four. The purpose of training the model without the Duke
+teams was to see if they were an outlier in our original model. If they were an
+anomaly within the original, than this test would produce a low prediction 
+accuracy. However, the model had a prediction accuracy of 100%, therefore
+substantiating the conclusion that our model was correct and Duke would not 
+have made the Final Four this year. 
+
+We also used data from the 2020 season to predict which teams were most likely 
+to have made the Final Four if March Madness had not been cancelled. Our 
+Logistic Regression model predicted that (in descending order) Kansas, 
+Gonzaga, Baylor, and Dayton were most likely to comprise the Final Four. Since 
+Kansas had the highest predicted probability to make the Final Four, at 0.296,
+we believe that they would have been the winner of March Madness 2020 (sad!). 
+
+As explained before, we initially narrowed the variables to those we thought to 
+be potentially meaningful with the hope of creating a functioning linear model
+with backward selection. Had we kept these variables, we might have ended up 
+with a larger number of statistically significant predictors, deeming our 
+current analysis not entirely comprehensive. Additionally, the linear model's 
+relatively low r-squared value of 0.4687 is not the level of fit we would have
+hoped for, but it may be a sign that March Madness is deserving of its name.
+The high prediction accuracy of the Logistic Regression model was most likely 
+a result of the limited number of true Final Four teams, thus why we measured 
+the test accuracy using the F1 score instead. 
+
+Looking back at our prediction of whether or not Duke would have been in the 
+Final Four, it makes sense that the Logistic Regression model classified that 
+they would not make it because no team in our 2020 Logistic Regression model 
+reached the probability threshold of 0.4. In reality, Duke is the 7th most 
+likely team to reach the Final Four based on our full 2020 model, giving the 
+Cameron Crazies some satisfying closure to a 
+shortened season. 
+
+## Reference 
+https://www.rdocumentation.org/packages/MLmetrics/versions/1.1.1/topics/F1_Score
+
+http://haozhu233.github.io/kableExtra/awesome_table_in_pdf.pdf
