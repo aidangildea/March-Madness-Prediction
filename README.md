@@ -1,6 +1,6 @@
 # March-Madness-Prediction
 
-The Outliers are analyzing data from the 2015-2019 D1 College Basketball seasons to create predictions about what may have happened in March Madness 2020. Our main research question is: What statistical factors most attribute to success in March Madness for teams?
+As part of the course STA 199: Intro to Data Science, we analyze data from the 2015-2019 D1 College Basketball seasons to create predictions about what may have happened in March Madness 2020. Our main research question is: What statistical factors most attribute to success in March Madness for teams?
 
 Dimensions: 1757 x 24
 
